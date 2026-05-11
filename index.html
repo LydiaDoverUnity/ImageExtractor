@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Asset Extractor</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f0f0f; color: #fff; text-align: center; padding: 50px; }
+        .upload-container { border: 2px dashed #444; border-radius: 20px; padding: 60px; background: #1a1a1a; cursor: pointer; transition: 0.3s; max-width: 600px; margin: auto; }
+        .upload-container:hover { border-color: #007bff; background: #222; }
+        #gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; margin-top: 40px; }
+        .asset-card { background: #252525; border-radius: 12px; padding: 15px; border: 1px solid #333; }
+        .asset-card img { width: 100%; height: 120px; object-fit: contain; background: #333; border-radius: 8px; margin-bottom: 10px; }
+        .dl-btn { background: #007bff; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; }
+        .dl-btn:hover { background: #0056b3; }
+        #status { margin-top: 20px; color: #888; }
+    </style>
+</head>
+<body>
+
+    <h1>HTML Game Asset Extractor</h1>
+    <p>Upload your <code>game.html</code> file to extract PNG and JPG images.</p>
+
+    <div class="upload-container" id="dropZone">
+        <p>Drag & Drop your HTML file here</p>
+        <p>or <strong>Click to Browse</strong></p>
+        <input type="file" id="fileInput" accept=".html" style="display: none;">
+    </div>
+    
+    <div id="status"></div>
+    <div id="gallery"></div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const gallery = document.getElementById('gallery');
+        const status = document.getElementById('status');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = '#007bff'; });
+        dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#444'; });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        function handleFile(file) {
+            if (!file) return;
+            status.innerText = "Processing file...";
+            gallery.innerHTML = "";
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target.result;
+                extractImages(content);
+            };
+            reader.readAsText(file);
+        }
+
+        function extractImages(text) {
+            // Regex to find Base64 encoded images (common in single-file game builds)
+            const base64Regex = /data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+/g;
+            const matches = text.match(base64Regex) || [];
+            
+            if (matches.length === 0) {
+                status.innerText = "No embedded images found in this file.";
+                return;
+            }
+
+            status.innerText = `Found ${matches.length} images!`;
+
+            matches.forEach((dataUri, index) => {
+                const ext = dataUri.split(';')[0].split('/')[1];
+                const card = document.createElement('div');
+                card.className = 'asset-card';
+                
+                card.innerHTML = `
+                    <img src="${dataUri}" alt="Asset ${index}">
+                    <button class="dl-btn" onclick="downloadAsset('${dataUri}', 'asset_${index}.${ext}')">Download ${ext.toUpperCase()}</button>
+                `;
+                gallery.appendChild(card);
+            });
+        }
+
+        function downloadAsset(uri, name) {
+            const link = document.createElement('a');
+            link.href = uri;
+            link.download = name;
+            link.click();
+        }
+    </script>
+</body>
+</html>
