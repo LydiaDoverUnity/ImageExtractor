@@ -2,149 +2,133 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ultimate Game Asset Extractor</title>
+    <script src="https://js.puter.com/v2/"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
-        :root { --primary: #00d2ff; --bg: #0f172a; --card: #1e293b; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: #f8fafc; margin: 0; padding: 2rem; }
-        .container { max-width: 1100px; margin: auto; }
-        .header { margin-bottom: 2rem; }
-        
-        .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
-        input[type="text"] { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #334155; background: #020617; color: white; }
-        
-        #drop-zone { border: 2px dashed #334155; border-radius: 12px; padding: 40px; cursor: pointer; transition: 0.3s; background: var(--card); }
-        #drop-zone:hover { border-color: var(--primary); background: #2d3748; }
-
-        .controls { margin-top: 20px; display: none; }
-        button { background: var(--primary); color: #000; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        button#zip-btn { background: #10b981; margin-left: 10px; }
-
-        #gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin-top: 2rem; }
-        .asset-card { background: var(--card); border-radius: 8px; padding: 10px; text-align: center; font-size: 12px; }
-        .asset-card img { width: 100%; height: 120px; object-fit: contain; background: #334155; border-radius: 4px; margin-bottom: 10px; }
+        body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; text-align: center; }
+        .box { background: #222; padding: 20px; border-radius: 10px; max-width: 800px; margin: 0 auto 20px; border: 1px solid #444; }
+        input[type="text"] { width: 70%; padding: 12px; background: #000; color: #0f0; border: 1px solid #444; border-radius: 5px; }
+        button { padding: 12px 20px; cursor: pointer; font-weight: bold; border-radius: 5px; border: none; }
+        .btn-fetch { background: #007bff; color: white; }
+        .btn-zip { background: #28a745; color: white; display: none; margin: 20px auto; }
+        #status-log { color: #aaa; font-size: 0.9em; margin: 10px; font-family: monospace; }
+        #gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+        .card { background: #333; padding: 10px; border-radius: 8px; }
+        img { width: 100%; height: 100px; object-fit: contain; background: #fff; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="header">
-        <h1>🎮 Game Asset Deep-Extractor</h1>
-        <p>Paste a URL or upload an HTML/JS file to pull all embedded images.</p>
+    <h1>🎮 Asset Deep Extractor</h1>
+
+    <div class="box">
+        <input type="text" id="url-input" placeholder="Paste Amazon S3 URL here...">
+        <button class="btn-fetch" onclick="startDeepFetch()">Start Fetch</button>
+        <div id="status-log">Ready. Paste a link to begin.</div>
     </div>
 
-    <div class="input-group">
-        <input type="text" id="urlInput" placeholder="Paste game URL here (CORS permitting)...">
-        <button onclick="fetchFromUrl()">Fetch URL</button>
-    </div>
-
-    <div id="drop-zone">
-        <strong>Drag & Drop File</strong> or Click to Upload (.html, .js, .json)
-        <input type="file" id="fileInput" hidden accept=".html,.js,.json">
-    </div>
-
-    <div class="controls" id="controls">
-        <span id="counter">0 images found</span>
-        <button id="zip-btn" onclick="downloadAllAsZip()">Download All as .ZIP</button>
-    </div>
-
+    <button id="zip-btn" class="btn-zip" onclick="downloadZip()">Download All as .ZIP</button>
     <div id="gallery"></div>
-</div>
 
-<script>
-    const fileInput = document.getElementById('fileInput');
-    const dropZone = document.getElementById('drop-zone');
-    const gallery = document.getElementById('gallery');
-    const controls = document.getElementById('controls');
-    let extractedAssets = [];
+    <script>
+        let allImages = [];
 
-    // Setup File Upload
-    dropZone.onclick = () => fileInput.click();
-    fileInput.onchange = (e) => handleFile(e.target.files[0]);
-
-    // Handle URL Fetch
-    async function fetchFromUrl() {
-        const url = document.getElementById('urlInput').value;
-        if (!url) return alert("Please enter a URL");
-        try {
-            const response = await fetch(url);
-            const text = await response.text();
-            processContent(text);
-        } catch (err) {
-            alert("Error fetching URL. Note: Many sites block this via CORS. Try downloading the HTML file and uploading it here instead.");
+        function log(msg) {
+            document.getElementById('status-log').innerText = "> " + msg;
+            console.log(msg);
         }
-    }
 
-    function handleFile(file) {
-        const reader = new FileReader();
-        reader.onload = (e) => processContent(e.target.result);
-        reader.readAsText(file);
-    }
+        async function startDeepFetch() {
+            const url = document.getElementById('url-input').value;
+            if (!url) return alert("Please enter a URL");
+            
+            allImages = [];
+            document.getElementById('gallery').innerHTML = "";
+            document.getElementById('zip-btn').style.display = "none";
 
-    function processContent(text) {
-        gallery.innerHTML = "Scanning...";
-        extractedAssets = [];
-        
-        // Comprehensive regex to catch base64 images and SVG paths
-        const base64Regex = /data:image\/([a-zA-Z]*);base64,([^\s"']+)/g;
-        let match;
-        
-        while ((match = base64Regex.exec(text)) !== null) {
-            extractedAssets.push({
-                type: match[1],
-                data: match[0]
+            log("Bypassing CORS and fetching HTML...");
+            try {
+                // Using puter.net.fetch to bypass browser security
+                const response = await puter.net.fetch(url);
+                const htmlText = await response.text();
+                log("HTML loaded. Scanning for linked scripts...");
+
+                // Find the specific .js files (like the oa673bf0 one)
+                const jsRegex = /src=["'](.*?\.(js))["']/g;
+                let match;
+                const scriptsToFetch = [];
+                
+                while ((match = jsRegex.exec(htmlText)) !== null) {
+                    let scriptUrl = match[1];
+                    if (!scriptUrl.startsWith('http')) {
+                        // Handle relative paths
+                        const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+                        scriptUrl = baseUrl + scriptUrl;
+                    }
+                    scriptsToFetch.push(scriptUrl);
+                }
+
+                log(`Found ${scriptsToFetch.length} scripts. Fetching asset data from them...`);
+
+                // Scan the HTML itself first
+                extractFromText(htmlText);
+
+                // Scan every JS file found
+                for (let sUrl of scriptsToFetch) {
+                    log(`Scanning script: ${sUrl.split('/').pop()}...`);
+                    try {
+                        const sRes = await puter.net.fetch(sUrl);
+                        const sText = await sRes.text();
+                        extractFromText(sText);
+                    } catch (e) {
+                        log(`Failed to load ${sUrl}`);
+                    }
+                }
+
+                log(`Finished! Found ${allImages.length} images.`);
+                if (allImages.length > 0) document.getElementById('zip-btn').style.display = "block";
+
+            } catch (err) {
+                log("Error: " + err.message);
+                alert("Critical failure. Check console.");
+            }
+        }
+
+        function extractFromText(text) {
+            // Regex to find ANY base64 image string
+            const base64Regex = /data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+/g;
+            const found = text.match(base64Regex) || [];
+            
+            found.forEach(str => {
+                if (!allImages.includes(str)) {
+                    allImages.push(str);
+                    renderThumb(str);
+                }
             });
         }
 
-        renderGallery();
-    }
-
-    function renderGallery() {
-        gallery.innerHTML = "";
-        if (extractedAssets.length === 0) {
-            gallery.innerHTML = "No assets found. Try uploading the game's .js files if the .html is empty.";
-            controls.style.display = "none";
-            return;
+        function renderThumb(src) {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.innerHTML = `<img src="${src}"><br><small>Asset ${allImages.length}</small>`;
+            document.getElementById('gallery').appendChild(div);
         }
 
-        controls.style.display = "block";
-        document.getElementById('counter').innerText = `${extractedAssets.length} images found`;
-
-        extractedAssets.forEach((asset, i) => {
-            const div = document.createElement('div');
-            div.className = 'asset-card';
-            div.innerHTML = `
-                <img src="${asset.data}">
-                <div>Asset_${i}.png</div>
-                <button onclick="downloadSingle('${asset.data}', 'asset_${i}.png')" style="margin-top:5px; padding:5px; font-size:10px;">Save PNG</button>
-            `;
-            gallery.appendChild(div);
-        });
-    }
-
-    function downloadSingle(url, name) {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = name;
-        a.click();
-    }
-
-    async function downloadAllAsZip() {
-        const zip = new JSZip();
-        const imgFolder = zip.folder("images");
-
-        extractedAssets.forEach((asset, i) => {
-            const base64Data = asset.data.split(',')[1];
-            imgFolder.file(`asset_${i}.png`, base64Data, {base64: true});
-        });
-
-        const content = await zip.generateAsync({type: "blob"});
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(content);
-        link.download = "game_assets.zip";
-        link.click();
-    }
-</script>
+        async function downloadZip() {
+            log("Generating ZIP file...");
+            const zip = new JSZip();
+            allImages.forEach((img, i) => {
+                const data = img.split(',')[1];
+                zip.file(`image_${i}.png`, data, {base64: true});
+            });
+            const content = await zip.generateAsync({type: "blob"});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = "game_assets.zip";
+            link.click();
+            log("Download started.");
+        }
+    </script>
 </body>
 </html>
